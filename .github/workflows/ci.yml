@@ -977,6 +977,7 @@ jobs:
           cxxflags: ${{ (matrix.asan && '-fsanitize=pointer-subtract') || '' }}
           user-config: ${{ (startsWith(matrix.runs-on, 'windows') && format('{0}/user-config.jam', steps.patch.outputs.workspace_root)) || '' }}
           stop-on-error: true
+          extra-args: "/libs/http_io/example"
 
       - name: Boost CMake Workflow
         uses: alandefreitas/cpp-actions/cmake-workflow@v1.8.10
