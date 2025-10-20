@@ -33,14 +33,19 @@ template<class Derived>
 class http_responder
 {
 public:
+    explicit
     http_responder(
-        asio_server& srv,
+        server& srv,
         router_type& rr)
-        : id_(srv.make_unique_id())
-        , srv_(srv)
+        : id_(
+            []() noexcept
+            {
+                static std::size_t n = 0;
+                return ++n;
+            }())
         , rr_(rr)
-        , pr_(srv_.services())
-        , sr_(srv_.services())
+        , pr_(srv.services())
+        , sr_(srv.services())
     {
     }
 
@@ -90,7 +95,7 @@ private:
                 res_,
                 pr_,
                 sr_,
-                srv_.is_stopping()});
+                self().server().is_stopping()});
         BOOST_ASSERT(found);
         (void)found;
 
@@ -156,7 +161,6 @@ protected:
 protected:
     std::size_t id_ = 0;
     section sect_;
-    asio_server& srv_;
 
 private:
     acceptor_config const* pconfig_ = nullptr;

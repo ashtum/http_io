@@ -57,15 +57,19 @@ public:
     >
     worker_ssl(
         workers_base& wb,
-        asio_server& srv,
         Executor0 const& ex,
         asio::ssl::context& ssl_ctx,
         router_type& rr)
-        : http_responder<worker_ssl>(srv, rr)
+        : http_responder<worker_ssl>(wb.server(), rr)
         , wb_(wb)
         , ssl_ctx_(ssl_ctx)
         , stream_(ex, ssl_ctx)
     {
+    }
+
+    http_io::server& server() noexcept
+    {
+        return wb_.server();
     }
 
     socket_type& socket() noexcept

@@ -8,82 +8,125 @@
 //
 
 #include "asio_server.hpp"
+#include <boost/http_io/server/call_mf.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/signal_set.hpp>
+#include <boost/asio/strand.hpp>
+#include <thread>
+#include <vector>
 
 namespace boost {
 namespace http_io {
 
-asio_server::
-asio_server()
-    : ioc_(1)
-    , sigs_(get_executor(), SIGINT, SIGTERM)
-    , timer_(get_executor())
+struct asio_server::impl
 {
+    using strand_type =
+        asio::strand<asio::io_context::executor_type>;
+
+    explicit
+    impl(
+        int num_threads_)
+        : num_threads(num_threads_)
+        , ioc(num_threads_)
+        , sigs(ioc.get_executor(), SIGINT, SIGTERM)
+        , timer(strand_type(ioc.get_executor()))
+    {
+    }
+
+    int num_threads;
+    asio::io_context ioc;
+    asio::signal_set sigs;
+    asio::basic_waitable_timer<
+        std::chrono::steady_clock,
+        asio::wait_traits<std::chrono::steady_clock>,
+        strand_type> timer;
+    std::vector<std::thread> vt;
+    bool got_sigint = false;
+};
+
+asio_server::
+~asio_server()
+{
+    delete impl_;
+}
+
+asio_server::
+asio_server(
+    int num_threads)
+    : impl_(new impl(num_threads))
+{
+    if( impl_->num_threads > 1)
+        impl_->vt.resize(impl_->num_threads - 1);
+}
+
+auto
+asio_server::
+get_executor() noexcept ->
+    executor_type
+{
+    return impl_->ioc.get_executor();
 }
 
 void
 asio_server::
 run()
 {
-    using namespace std::placeholders;
+    do_start();
 
     // Capture SIGINT and SIGTERM to
     // perform a clean shutdown
-    sigs_.async_wait(std::bind(
-        &asio_server::on_signal, this, _1, _2));
+    impl_->sigs.async_wait(call_mf(
+        &asio_server::on_signal, this));
 
-    for(auto& svc : v_)
-        svc->run();
-
-    ioc_.run();
+    for(auto& t : impl_->vt)
+    {
+        t = std::thread(
+            [&]
+            {
+                // VFALCO exception catcher?
+                impl_->ioc.run();
+            });
+    }
+    // VFALCO exception catcher?
+    impl_->ioc.run();
 }
 
 void
 asio_server::
 stop()
 {
-    if(is_stopped_)
+    if(is_stopping())
     {
-        // happens when there's a race with
-        // the signal and the timer handlers
+        // happens when SIGINT and timer both fire
         return;
     }
-    is_stopped_ = true;
-
-    boost::system::error_code ec;
-    sigs_.cancel(ec); // VFALCO should we use the 0-arg overload?
-    timer_.cancel();
-
-    for(auto& svc : v_)
-        svc->stop();
+    system::error_code ec;
+    impl_->sigs.cancel(ec); // VFALCO should we use the 0-arg overload?
+    impl_->timer.cancel();
+    do_stop();
+    // is_stopping() still returns `true` here
+    for(auto& t : impl_->vt)
+        t.join();
 }
 
 void
 asio_server::
 on_signal(
-    boost::system::error_code const& ec, int sig)
+    system::error_code const&, int)
 {
-    using namespace std::placeholders;
-
-    (void)ec;
-    (void)sig;
-    if(! is_stopping_)
+    if(impl_->got_sigint)
     {
-        // new requests will receive HTTP 503 status
-        is_stopping_ = true;
-
-        // begin timed, graceful shutdown
-        sigs_.async_wait(std::bind(
-            &asio_server::on_signal, this, _1, _2));
-
-        timer_.expires_after(std::chrono::seconds(30));
-        timer_.async_wait(std::bind(
-            &asio_server::on_timer, this, _1));
+        // second SIGINT causes immediate stop
+        return stop();
     }
-    else
-    {
-        // force a stop
-        stop();
-    }
+
+    // first SIGINT starts a 30 second shutdown
+    impl_->got_sigint = true;
+    impl_->sigs.async_wait(call_mf(
+        &asio_server::on_signal, this));
+    impl_->timer.expires_after(std::chrono::seconds(30));
+    impl_->timer.async_wait(call_mf(
+        &asio_server::on_timer, this));
 }
 
 void
@@ -92,10 +135,8 @@ on_timer(
     boost::system::error_code const& ec)
 {
     if(! ec.failed())
-    {
-        stop();
-    }
-    else if(ec != boost::asio::error::operation_aborted)
+        return stop();
+    if(ec != boost::asio::error::operation_aborted)
     {
         // log?
     }

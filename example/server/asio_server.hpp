@@ -11,9 +11,8 @@
 #define BOOST_HTTP_IO_EXAMPLE_ASIO_SERVER_HPP
 
 #include <boost/http_io/server/server.hpp>
-#include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/asio/io_context.hpp>
-#include <boost/asio/signal_set.hpp>
+#include <memory>
 
 namespace boost {
 namespace http_io {
@@ -26,26 +25,39 @@ public:
     using executor_type =
         asio::io_context::executor_type;
 
-    executor_type
-    get_executor() noexcept
-    {
-        return ioc_.get_executor();
-    }
+    /** Destructor
+    */
+    BOOST_HTTP_IO_DECL
+    ~asio_server();
 
-    asio_server();
+    /** Constructor
+    */
+    BOOST_HTTP_IO_DECL
+    asio_server(int num_threads);
+
+    BOOST_HTTP_IO_DECL
+    executor_type
+    get_executor() noexcept;
+
+    /** Run the server
+
+        This function blocks until the server is stopped.
+    */
+    BOOST_HTTP_IO_DECL
     void run();
+
+    /** Stop the server
+    */
+    BOOST_HTTP_IO_DECL
     void stop();
 
 private:
+    struct impl;
+
     void on_signal(system::error_code const&, int);
     void on_timer(system::error_code const&);
 
-    asio::io_context ioc_;
-    asio::signal_set sigs_;
-    asio::basic_waitable_timer<
-        std::chrono::steady_clock,
-        asio::wait_traits<std::chrono::steady_clock>,
-        executor_type> timer_;
+    impl* impl_;
 };
 
 } // http_io
