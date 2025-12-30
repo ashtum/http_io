@@ -27,6 +27,7 @@ else()
     assert
     config
     http_proto
+    json
     system
     throw_exception
 
