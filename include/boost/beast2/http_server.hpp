@@ -13,7 +13,8 @@
 #include <boost/beast2/detail/config.hpp>
 #include <boost/corosio/tcp_server.hpp>
 #include <boost/corosio/io_context.hpp>
-#include <boost/http/config.hpp>
+#include <boost/http/parser.hpp>
+#include <boost/http/serializer.hpp>
 #include <boost/http/server/router.hpp>
 #include <cstddef>
 
@@ -41,8 +42,8 @@ namespace beast2 {
         ctx,
         4,  // workers
         std::move( router ),
-        http::shared_parser_config::make(),
-        http::shared_serializer_config::make() );
+        http::parser::config(),
+        http::serializer::config() );
 
     srv.listen( "0.0.0.0", 8080 );
     ctx.run();
@@ -66,16 +67,16 @@ public:
         @param num_workers Number of worker objects for handling
             connections concurrently.
         @param router The router for dispatching requests to handlers.
-        @param parser_cfg Shared configuration for request parsers.
-        @param serializer_cfg Shared configuration for response
+        @param parser_cfg Configuration for request parsers.
+        @param serializer_cfg Configuration for response
             serializers.
     */
     http_server(
         corosio::io_context& ctx,
         std::size_t num_workers,
         http::router<http::route_params> router,
-        http::shared_parser_config parser_cfg,
-        http::shared_serializer_config serializer_cfg);
+        http::parser::config const& parser_cfg,
+        http::serializer::config const& serializer_cfg);
 };
 
 } // beast2

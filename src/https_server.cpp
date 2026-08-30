@@ -12,12 +12,10 @@
 #include <boost/capy/task.hpp>
 #include <boost/capy/cond.hpp>
 #include <boost/capy/ex/strand.hpp>
-#include <boost/capy/io/any_read_stream.hpp>
+#include <boost/capy/io/any_stream.hpp>
 #include <boost/corosio/openssl_stream.hpp>
-#include <boost/http/io/any_buffer_sink.hpp>
-#include <boost/http/io/any_buffer_source.hpp>
 #include <boost/http/request_parser.hpp>
-#include <boost/http/response.hpp>
+#include <boost/http/response_head.hpp>
 #include <boost/http/server/router.hpp>
 #include <boost/http/serializer.hpp>
 #include <boost/http/string_body.hpp>
@@ -34,8 +32,8 @@ struct https_server::impl
 {
     corosio::tls_context tls_ctx;
     http::router<http::route_params> router;
-    http::shared_parser_config parser_cfg;
-    http::shared_serializer_config serializer_cfg;
+    http::parser::config parser_cfg;
+    http::serializer::config serializer_cfg;
 
     impl(
         corosio::tls_context tc,
@@ -98,10 +96,8 @@ struct https_server::
             co_return;
         }
 
-        // Wire parser and serializer to the TLS stream
-        rp.req_body = http::any_buffer_source(parser.source_for(*ssl));
-        rp.res_body = http::any_buffer_sink(serializer.sink_for(*ssl));
-        stream = capy::any_read_stream(ssl.get());
+        // Wire the worker's body source and sink to the TLS stream
+        stream = capy::any_stream(ssl.get());
 
         // Process HTTP requests over TLS
         co_await do_http_session();
@@ -132,13 +128,13 @@ https_server(
     std::size_t num_workers,
     corosio::tls_context tls_ctx,
     http::router<http::route_params> router,
-    http::shared_parser_config parser_cfg,
-    http::shared_serializer_config serializer_cfg)
+    http::parser::config const& parser_cfg,
+    http::serializer::config const& serializer_cfg)
     : tcp_server(ctx, ctx.get_executor())
     , impl_(new impl(std::move(tls_ctx), std::move(router)))
 {
-    impl_->parser_cfg = std::move(parser_cfg);
-    impl_->serializer_cfg = std::move(serializer_cfg);
+    impl_->parser_cfg = parser_cfg;
+    impl_->serializer_cfg = serializer_cfg;
 
     std::vector<std::unique_ptr<tcp_server::worker_base>> workers;
     workers.reserve(num_workers);

@@ -14,7 +14,8 @@
 #include <boost/corosio/tcp_server.hpp>
 #include <boost/corosio/io_context.hpp>
 #include <boost/corosio/tls_context.hpp>
-#include <boost/http/config.hpp>
+#include <boost/http/parser.hpp>
+#include <boost/http/serializer.hpp>
 #include <boost/http/server/router.hpp>
 #include <cstddef>
 
@@ -50,8 +51,8 @@ namespace beast2 {
         4,  // workers
         std::move( tls_ctx ),
         std::move( router ),
-        http::shared_parser_config::make(),
-        http::shared_serializer_config::make() );
+        http::parser::config(),
+        http::serializer::config() );
 
     srv.listen( "0.0.0.0", 8443 );
     ctx.run();
@@ -78,8 +79,8 @@ public:
             key configuration. The context is copied and shared
             among all workers.
         @param router The router for dispatching requests to handlers.
-        @param parser_cfg Shared configuration for request parsers.
-        @param serializer_cfg Shared configuration for response
+        @param parser_cfg Configuration for request parsers.
+        @param serializer_cfg Configuration for response
             serializers.
     */
     https_server(
@@ -87,8 +88,8 @@ public:
         std::size_t num_workers,
         corosio::tls_context tls_ctx,
         http::router<http::route_params> router,
-        http::shared_parser_config parser_cfg,
-        http::shared_serializer_config serializer_cfg);
+        http::parser::config const& parser_cfg,
+        http::serializer::config const& serializer_cfg);
 };
 
 } // beast2

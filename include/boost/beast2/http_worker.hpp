@@ -11,9 +11,10 @@
 #define BOOST_BEAST2_HTTP_WORKER_HPP
 
 #include <boost/beast2/detail/config.hpp>
-#include <boost/capy/io/any_read_stream.hpp>
+#include <boost/capy/io/any_stream.hpp>
 #include <boost/capy/task.hpp>
-#include <boost/http/config.hpp>
+#include <boost/http/message_reader.hpp>
+#include <boost/http/message_writer.hpp>
 #include <boost/http/request_parser.hpp>
 #include <boost/http/serializer.hpp>
 #include <boost/http/server/router.hpp>
@@ -37,8 +38,11 @@ namespace beast2 {
     @li Construct `http_worker` with a router and configurations
     @li Initialize the @ref stream member before calling
         @ref do_http_session
-    @li Wire the parser and serializer to the socket by setting
-        `rp.req_body` and `rp.res_body`
+
+    The body source and sink are wired to @ref stream by the
+    constructor, so a derived class only assigns @ref stream. This
+    allows a stream which does not exist yet at construction, such
+    as a TLS stream created after the handshake.
 
     @par Example
     @code
@@ -51,15 +55,13 @@ namespace beast2 {
         my_worker(
             corosio::io_context& ctx,
             http::router<http::route_params> const& router,
-            http::shared_parser_config parser_cfg,
-            http::shared_serializer_config serializer_cfg)
+            http::parser::config const& parser_cfg,
+            http::serializer::config const& serializer_cfg)
             : http_worker(router, parser_cfg, serializer_cfg)
             , sock(ctx)
         {
             sock.open();
-            rp.req_body = http::any_buffer_source(parser.source_for(sock));
-            rp.res_body = http::any_buffer_sink(serializer.sink_for(sock));
-            stream = capy::any_read_stream(&sock);
+            stream = capy::any_stream(&sock);
         }
 
         corosio::tcp_socket& socket() override { return sock; }
@@ -82,21 +84,21 @@ class BOOST_BEAST2_DECL http_worker
 public:
     http::router<http::route_params> fr;
     http::route_params rp;
-    capy::any_read_stream stream;
+    capy::any_stream stream;
     http::request_parser parser;
     http::serializer serializer;
 
     /** Construct an HTTP worker.
 
         @param fr_ The router for dispatching requests to handlers.
-        @param parser_cfg Shared configuration for the request parser.
-        @param serializer_cfg Shared configuration for the response
+        @param parser_cfg Configuration for the request parser.
+        @param serializer_cfg Configuration for the response
             serializer.
     */
     http_worker(
         http::router<http::route_params> fr_,
-        http::shared_parser_config parser_cfg,
-        http::shared_serializer_config serializer_cfg);
+        http::parser::config const& parser_cfg,
+        http::serializer::config const& serializer_cfg);
 
     /** Handle an HTTP session.
 
